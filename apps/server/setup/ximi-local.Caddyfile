@@ -1,0 +1,29 @@
+livekit.ximi.offline {
+	reverse_proxy 127.0.0.1:7880
+	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
+}
+
+control.ximi.offline {
+	reverse_proxy 127.0.0.1:3100
+	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
+}
+
+performer.ximi.offline {
+	reverse_proxy 127.0.0.1:3200
+	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
+}
+
+scout.ximi.offline {
+	reverse_proxy 127.0.0.1:3300
+	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
+}
+
+output.ximi.offline {
+	reverse_proxy 127.0.0.1:3400
+	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
+}
+
+server.ximi.offline {
+	reverse_proxy 127.0.0.1:4000
+	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
+}

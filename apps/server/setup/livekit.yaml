@@ -34,4 +34,4 @@ keys:
 webhook:
   api_key: 'APIbwh75fZDiGWQ'
   urls:
-    - 'http://localhost:4000/livekit/webhook'
+    - 'https://server.ximi.offline/livekit/webhook'

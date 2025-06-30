@@ -1,0 +1,13 @@
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = performer.ximi.offline
+DNS.2 = control.ximi.offline
+DNS.3 = output.ximi.offline
+DNS.4 = server.ximi.offline
+DNS.5 = turn.ximi.offline
+DNS.6 = livekit.ximi.offline
+DNS.7 = scout.ximi.offline

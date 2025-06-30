@@ -1,6 +1,6 @@
 export type XimiServer = {
   name: string;
-  id: "localhost" | "ximi-livekit" | "livekit-cloud";
+  id: "localhost" | "ximi-livekit" | "livekit-cloud" | "ximi-offline";
   serverUrl: string;
 };
 
@@ -20,11 +20,19 @@ const servers: XimiServer[] = [
   },
 ];
 
+if (import.meta.env.VITE_HAS_OFFLINE) {
+  servers.splice(0, 0, {
+    name: "XIMI Offline",
+    id: "ximi-offline",
+    serverUrl: "https://server.ximi.offline",
+  });
+}
+
 if (import.meta.env.DEV) {
   servers.splice(0, 0, {
     name: "localhost",
     id: "localhost",
-    serverUrl: "http://localhost:4000",
+    serverUrl: "https://localhost:4000",
   });
 }
 

@@ -11,6 +11,7 @@ const createRoomSchema = (hostname: string) =>
         "checkRoomUnique",
         "This room name already exists",
         async (value) => {
+          console.log(hostname);
           try {
             const r = await fetch(`${hostname}/room/${value}/exists`);
             const result = await r.json();

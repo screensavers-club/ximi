@@ -33,5 +33,6 @@
     "@stitches/react": "^1.2.8",
     "date-fns": "^2.29.3",
     "object-hash": "^3.0.0"
-  }
+  },
+  "packageManager": "pnpm@9.1.1"
 }

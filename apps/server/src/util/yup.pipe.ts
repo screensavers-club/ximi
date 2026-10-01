@@ -3,16 +3,16 @@ import * as Yup from 'yup';
 
 @Injectable()
 class YupValidationPipe implements PipeTransform {
-  constructor(private schema: Yup.Schema<any>) {}
+  constructor(private schema: Yup.ISchema<any>) {}
   async transform(value: unknown) {
     try {
-      await this.schema.validate(value);
-      return value;
+      // return the cast value: it is type-coerced and has unknown keys stripped
+      return await this.schema.validate(value, { abortEarly: false });
     } catch (error) {
-      console.log(2, error);
-      throw new BadRequestException(error.errors, {
-        cause: error,
-      });
+      if (error instanceof Yup.ValidationError) {
+        throw new BadRequestException(error.errors, { cause: error });
+      }
+      throw error;
     }
   }
 }

@@ -1,33 +1,46 @@
 import * as Yup from "yup";
 
+const roomNameField = () =>
+  Yup.string()
+    .required()
+    .matches(/^[0-9a-zA-Z]+$/, "digits and alphabets only")
+    .max(10, "max 10 characters")
+    .min(2, "min 2 characters");
+
+const passcodeField = () =>
+  Yup.string()
+    .required()
+    .matches(/^[0-9]*$/, "digits only")
+    .max(5, "must be 5 digits")
+    .min(5, "must be 5 digits");
+
+/* Server side: shape only. Room uniqueness is checked against LiveKit directly. */
+const createRoomBodySchema = () =>
+  Yup.object({
+    roomName: roomNameField(),
+    passcode: passcodeField(),
+  })
+    .required()
+    .noUnknown();
+
+/* Client side: also asks the server whether the room name is free */
 const createRoomSchema = (hostname: string) =>
   Yup.object({
-    roomName: Yup.string()
-      .required()
-      .matches(/^[0-9a-zA-Z]+$/, "digits and alphabets only")
-      .max(10, "max 10 characters")
-      .min(2, "min 2 characters")
-      .test(
-        "checkRoomUnique",
-        "This room name already exists",
-        async (value) => {
-          console.log(hostname);
-          try {
-            const r = await fetch(`${hostname}/room/${value}/exists`);
-            const result = await r.json();
-            return !result as boolean;
-          } catch (err) {
-            console.warn(err);
-            return false;
-          }
-        },
-      ),
-    passcode: Yup.string()
-
-      .required()
-      .matches(/^[0-9]*$/, "digits only")
-      .max(5, "must be 5 digits")
-      .min(5, "must be 5 digits"),
+    roomName: roomNameField().test(
+      "checkRoomUnique",
+      "This room name already exists",
+      async (value) => {
+        try {
+          const r = await fetch(`${hostname}/room/${value}/exists`);
+          const result = await r.json();
+          return !result as boolean;
+        } catch (err) {
+          console.warn(err);
+          return false;
+        }
+      },
+    ),
+    passcode: passcodeField(),
   })
     .required()
     .noUnknown();
@@ -114,4 +127,9 @@ const joinRoomSchema = () =>
     .required()
     .noUnknown();
 
-export { joinRoomSchemaForRoom, createRoomSchema, joinRoomSchema };
+export {
+  joinRoomSchemaForRoom,
+  createRoomSchema,
+  createRoomBodySchema,
+  joinRoomSchema,
+};

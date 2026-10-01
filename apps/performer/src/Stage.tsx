@@ -1,6 +1,10 @@
-import { useLocalParticipant, useRoomContext } from "@livekit/components-react";
-import { DataPacket_Kind, RoomEvent } from "livekit-client";
-import { useEffect, useState } from "react";
+import {
+  useLocalParticipant,
+  useParticipantInfo,
+  useRoomContext,
+} from "@livekit/components-react";
+import { RoomEvent } from "livekit-client";
+import { useEffect } from "react";
 import { MessageDataPayload, PingDataPayload, PongDataPayload } from "types";
 import {
   AudioInputControl,
@@ -14,16 +18,8 @@ import {
 const Stage = () => {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setTick((t) => (t === 0 ? 1 : 0));
-    }, 2500);
-    return () => {
-      window.clearInterval(id);
-    };
-  }, [localParticipant.metadata]);
+  // re-renders when this participant's state (metadata) changes
+  const { metadata } = useParticipantInfo({ participant: localParticipant });
 
   // pong response
   useEffect(() => {
@@ -54,9 +50,10 @@ const Stage = () => {
           const encoder = new TextEncoder();
           const pongData = encoder.encode(JSON.stringify(pongPayload));
 
-          localParticipant.publishData(pongData, DataPacket_Kind.RELIABLE, [
-            payload.sender,
-          ]);
+          localParticipant.publishData(pongData, {
+            reliable: true,
+            destinationIdentities: [payload.sender],
+          });
         }
       } catch (err) {
         console.warn(err);
@@ -70,7 +67,7 @@ const Stage = () => {
   }, [room, localParticipant]);
 
   try {
-    if (localParticipant.metadata === undefined) {
+    if (metadata === undefined) {
       console.warn("local participant does not have metadata");
       return <>loading</>;
     }

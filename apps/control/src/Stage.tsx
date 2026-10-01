@@ -1,5 +1,4 @@
 import { useLocalParticipant, useRoomInfo } from "@livekit/components-react";
-import { createLocalAudioTrack } from "livekit-client";
 import { useContext, useEffect, useState } from "react";
 import classNames from "classnames";
 import {
@@ -20,7 +19,14 @@ import {
 } from "types";
 import { PresetRenamer } from "./PresetRenamer";
 import { AudioLayout } from "./AudioLayout";
-import { AudioRenderer, ChatControl } from "ui/tailwind";
+import {
+  AudioRenderer,
+  ChatControl,
+  patchRoomState,
+  publishAudioInput,
+  toastError,
+  unpublishAudio,
+} from "ui/tailwind";
 import { toast } from "react-hot-toast";
 import { VideoLayout } from "./VideoLayout";
 import { ScoutText } from "./ScoutText";
@@ -42,14 +48,7 @@ const setActivePreset = async (
     activePreset: n,
     roomName,
   };
-  const r = await fetch(`${serverUrl}/room/state`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-  return await r.json();
+  return patchRoomState(serverUrl, patch);
 };
 
 const clsSmallSidebarButton = classNames(
@@ -136,12 +135,12 @@ const Stage = () => {
                 <button
                   type="button"
                   onClick={async () => {
-                    const response = await setActivePreset(
+                    const switched = await setActivePreset(
                       server.serverUrl,
                       meta.name,
                       n as SwitchActivePresetAction["activePreset"],
                     );
-                    if (response.ok === true) {
+                    if (switched) {
                       if (roomState === undefined) {
                         return;
                       }
@@ -250,20 +249,12 @@ const Stage = () => {
                   roomState: preset,
                 };
 
-                const r = await fetch(`${server.serverUrl}/room/state`, {
-                  method: "PATCH",
-                  body: JSON.stringify(payload),
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                });
-
-                console.log({ r });
-
-                toast("Preset loaded", {
-                  position: "bottom-right",
-                  className: "bg-brand/80 text-text rounded-none",
-                });
+                if (await patchRoomState(server.serverUrl, payload)) {
+                  toast("Preset loaded", {
+                    position: "bottom-right",
+                    className: "bg-brand/80 text-text rounded-none",
+                  });
+                }
                 e.target.value = "";
               } catch (err) {
                 console.log(err);
@@ -332,7 +323,7 @@ const TabSwitcher: React.FC<{
 
 const MicControl = () => {
   const p = useLocalParticipant();
-  const hasTrack = p.localParticipant.audioTracks.size > 0;
+  const hasTrack = p.localParticipant.audioTrackPublications.size > 0;
   const [muted, setMuted] = useState(false);
 
   return (
@@ -343,21 +334,15 @@ const MicControl = () => {
           hasTrack ? "text-accent" : "text-text"
         }`}
         onClick={async () => {
-          if (hasTrack) {
-            p.localParticipant.audioTracks.forEach(async ({ track }) => {
-              if (track !== undefined) {
-                await p.localParticipant.unpublishTrack(track);
-              }
-            });
-          } else {
-            const newTrack = await createLocalAudioTrack({
-              autoGainControl: false,
-              echoCancellation: true,
-              noiseSuppression: true,
-              sampleRate: 48000,
-              channelCount: 2,
-            });
-            await p.localParticipant.publishTrack(newTrack);
+          try {
+            if (hasTrack) {
+              await unpublishAudio(p.localParticipant);
+              setMuted(false);
+            } else {
+              await publishAudioInput(p.localParticipant, { mode: "VOICE" });
+            }
+          } catch (err) {
+            toastError(err, "Microphone");
           }
         }}
       >
@@ -374,16 +359,15 @@ const MicControl = () => {
         }
 				 ${hasTrack ? "pointer-events-auto" : "pointer-events-none"}
 				`}
-        onClick={() => {
+        onClick={async () => {
+          const pubs = Array.from(
+            p.localParticipant.audioTrackPublications.values(),
+          );
           if (muted) {
-            p.localParticipant.audioTracks.forEach(async (track) => {
-              await track.unmute();
-              setMuted(false);
-            });
+            await Promise.all(pubs.map((pub) => pub.unmute()));
+            setMuted(false);
           } else {
-            p.localParticipant.audioTracks.forEach(async (track) => {
-              await track.mute();
-            });
+            await Promise.all(pubs.map((pub) => pub.mute()));
             setMuted(true);
           }
         }}

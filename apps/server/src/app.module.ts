@@ -3,10 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { LivekitService } from './livekit/service';
+import { RoomStateService } from './room-state/room-state.service';
+import { RoomStateStore } from './room-state/room-state.store';
 
 @Module({
   imports: [ConfigModule.forRoot()],
   controllers: [AppController],
-  providers: [AppService, LivekitService],
+  providers: [AppService, LivekitService, RoomStateService, RoomStateStore],
 })
 export class AppModule {}

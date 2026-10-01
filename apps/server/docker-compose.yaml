@@ -4,6 +4,7 @@ version: "3.9"
 services:
   caddy:
     image: livekit/caddyl4
+    restart: unless-stopped
     command: run --config /etc/caddy.yaml --adapter yaml
     network_mode: "host"
     volumes:
@@ -11,6 +12,7 @@ services:
       - "./caddy_data:/data"
   livekit:
     image: livekit/livekit-server:latest
+    restart: unless-stopped
     command: --config /etc/livekit.yaml
     network_mode: "host"
     depends_on:
@@ -19,14 +21,32 @@ services:
       - "./livekit.yaml:/etc/livekit.yaml"
   redis:
     image: redis:6-alpine
+    restart: unless-stopped
     command: redis-server /etc/redis.conf
     network_mode: "host"
     volumes:
       - "./redis.conf:/etc/redis.conf"
   ximi-server:
     image: ximi-server:latest
+    restart: unless-stopped
     network_mode: "host"
     env_file:
       - .env
+    environment:
+      - DATA_DIR=/app/data
+    volumes:
+      # room state; survives container restarts and redeploys
+      - "./ximi-data:/app/data"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     depends_on:
       - livekit

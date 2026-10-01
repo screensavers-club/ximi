@@ -1,9 +1,8 @@
-import { Room } from "livekit-client";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaFaceSmile } from "react-icons/fa6";
 
 export const RoomList: React.FC<{
-  rooms: Room[];
+  rooms?: { name: string }[];
   onClick?: (roomName: string) => void;
 }> = ({ rooms = [], onClick = () => {} }) => {
   return (
@@ -16,7 +15,7 @@ export const RoomList: React.FC<{
       ) : (
         <div className="flex flex-col gap-2">
           <AnimatePresence>
-            {rooms
+            {[...rooms]
               .sort((a, b) => (a.name > b.name ? 1 : -1))
               .map((r) => (
                 <motion.div

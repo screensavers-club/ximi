@@ -3,7 +3,7 @@ import { useRoomContext, useLocalParticipant } from "@livekit/components-react";
 import { MessageDataPayload } from "types";
 import { Field, Formik } from "formik";
 import { toast } from "react-hot-toast";
-import { DataPacket_Kind, RoomEvent } from "livekit-client";
+import { RoomEvent } from "livekit-client";
 import { Transition, Dialog } from "@headlessui/react";
 import * as Yup from "yup";
 import { Button } from "./Button";
@@ -67,7 +67,7 @@ const ChatControl = () => {
           message: text,
         } as MessageDataPayload),
       );
-      return localParticipant.publishData(data, DataPacket_Kind.RELIABLE, {});
+      return localParticipant.publishData(data, { reliable: true });
     },
     [localParticipant],
   );

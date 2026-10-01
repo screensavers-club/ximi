@@ -7,6 +7,7 @@ import { useContext, useState } from "react";
 import { SetScoutTextAction, XimiParticipantState } from "types";
 import classNames from "classnames";
 import { XimiServerContext } from "./ximiServerContext";
+import { patchRoomState } from "ui/tailwind";
 
 const clsSidebarBtn = (active: boolean) =>
   classNames(
@@ -134,17 +135,9 @@ const TextPosterEditor = ({ identity }: { identity: string }) => {
                     roomName,
                   };
 
-                  const r = await fetch(`${server.serverUrl}/room/state`, {
-                    method: "PATCH",
-                    body: JSON.stringify(patch),
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                  });
-
-                  setText(() => "");
-
-                  return await r.json();
+                  if (await patchRoomState(server.serverUrl, patch)) {
+                    setText(() => "");
+                  }
                 }}
               >
                 Set {identity} text
@@ -159,17 +152,9 @@ const TextPosterEditor = ({ identity }: { identity: string }) => {
                     roomName,
                   };
 
-                  const r = await fetch(`${server.serverUrl}/room/state`, {
-                    method: "PATCH",
-                    body: JSON.stringify(patch),
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                  });
-
-                  setText(() => "");
-
-                  return await r.json();
+                  if (await patchRoomState(server.serverUrl, patch)) {
+                    setText(() => "");
+                  }
                 }}
               >
                 Set all scout

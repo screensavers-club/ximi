@@ -1,5 +1,10 @@
-import { useLocalParticipant, useRoomContext } from "@livekit/components-react";
-import { DataPacket_Kind, RoomEvent } from "livekit-client";
+import {
+  useLocalParticipant,
+  useParticipantInfo,
+  useRoomContext,
+  VideoTrack,
+} from "@livekit/components-react";
+import { RoomEvent, Track } from "livekit-client";
 import { useEffect, useState } from "react";
 import {
   MessageDataPayload,
@@ -13,22 +18,13 @@ import {
   CameraControl,
   ChatControl,
   ScreencastControl,
-  VideoFrame,
 } from "ui/tailwind";
 
 const Stage = () => {
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setTick((t) => (t === 0 ? 1 : 0));
-    }, 2500);
-    return () => {
-      window.clearInterval(id);
-    };
-  }, [localParticipant.metadata]);
+  // re-renders when this participant's state (metadata) changes
+  const { metadata } = useParticipantInfo({ participant: localParticipant });
 
   // pong response
   useEffect(() => {
@@ -59,9 +55,10 @@ const Stage = () => {
           const encoder = new TextEncoder();
           const pongData = encoder.encode(JSON.stringify(pongPayload));
 
-          localParticipant.publishData(pongData, DataPacket_Kind.RELIABLE, [
-            payload.sender,
-          ]);
+          localParticipant.publishData(pongData, {
+            reliable: true,
+            destinationIdentities: [payload.sender],
+          });
         }
       } catch (err) {
         console.warn(err);
@@ -75,7 +72,7 @@ const Stage = () => {
   }, [room, localParticipant]);
 
   try {
-    if (localParticipant.metadata === undefined) {
+    if (metadata === undefined) {
       console.warn("local participant does not have metadata");
       return <>loading</>;
     }
@@ -104,11 +101,13 @@ export { Stage };
 const ScoutVisual = () => {
   const [showPoster, setShowPoster] = useState(true);
   const { localParticipant } = useLocalParticipant();
+  const { metadata } = useParticipantInfo({ participant: localParticipant });
+  const ownVideo =
+    localParticipant.getTrackPublication(Track.Source.Camera) ??
+    localParticipant.getTrackPublication(Track.Source.ScreenShare);
 
   try {
-    const meta = JSON.parse(
-      localParticipant.metadata || "",
-    ) as XimiParticipantState;
+    const meta = JSON.parse(metadata || "") as XimiParticipantState;
 
     return (
       <div
@@ -123,10 +122,17 @@ const ScoutVisual = () => {
           </div>
         ) : (
           <div className="flex items-center justify-center w-full h-full uppercase">
-            {localParticipant.videoTracks.size < 1 ? (
+            {ownVideo === undefined ? (
               <div>Video off</div>
             ) : (
-              <VideoFrame identity={localParticipant.identity} full={true} />
+              <VideoTrack
+                trackRef={{
+                  participant: localParticipant,
+                  publication: ownVideo,
+                  source: ownVideo.source,
+                }}
+                className="object-contain w-full h-full"
+              />
             )}
           </div>
         )}

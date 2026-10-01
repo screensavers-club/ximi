@@ -1,12 +1,18 @@
 import { LiveKitRoom } from "@livekit/components-react";
+import { useState, useEffect, useContext } from "react";
 import {
-  useState,
-  Dispatch,
-  SetStateAction,
-  useEffect,
-  useContext,
-} from "react";
-import { Button, RoomList } from "ui/tailwind";
+  ApiError,
+  Button,
+  ConnectionBanner,
+  JoinCredentials,
+  RoomList,
+  SessionStatus,
+  errorMessage,
+  toastError,
+  useRoomSession,
+  ximiRequest,
+  ximiRoomOptions,
+} from "ui/tailwind";
 import { FaSpinner } from "react-icons/fa6";
 import { Header, Layout } from "ui/tailwind";
 import { Dialog, Transition } from "@headlessui/react";
@@ -49,11 +55,11 @@ function ServerSwitcher({ enabled }: { enabled: boolean }) {
 }
 
 function App() {
-  const [roomname, setRoomname] = useState<string>();
-  const [identity, setIdentity] = useState<string>();
-  const [token, setToken] = useState<string>();
-  const [connect, setConnect] = useState<boolean>(false);
   const [server, setServer] = useState<XimiServer>(servers[0]);
+  const { session, status, join, leave, roomCallbacks } = useRoomSession(
+    "control",
+    { persistInTab: true },
+  );
 
   const { data: livekitUrl, isValidating } = useSWR(
     `livekitUrl-${server.id}`,
@@ -72,17 +78,22 @@ function App() {
   return (
     <XimiServerContext.Provider value={{ server, setServer }}>
       <LiveKitRoom
-        token={token}
+        token={session?.token}
         serverUrl={livekitUrl}
-        connect={connect && !isValidating && typeof livekitUrl === "string"}
+        connect={
+          session !== undefined &&
+          !isValidating &&
+          typeof livekitUrl === "string"
+        }
+        options={ximiRoomOptions}
+        {...roomCallbacks}
       >
         <Screen
-          room={roomname}
-          identity={identity}
-          setToken={setToken}
-          setConnect={setConnect}
-          setRoomname={setRoomname}
-          setIdentity={setIdentity}
+          room={session?.credentials.roomName}
+          identity={session?.credentials.identity}
+          status={status}
+          join={join}
+          leave={leave}
         />
       </LiveKitRoom>
     </XimiServerContext.Provider>
@@ -94,11 +105,10 @@ export default App;
 const Screen: React.FC<{
   room?: string;
   identity?: string;
-  setToken: Dispatch<SetStateAction<string | undefined>>;
-  setConnect: Dispatch<SetStateAction<boolean>>;
-  setRoomname: Dispatch<SetStateAction<string | undefined>>;
-  setIdentity: Dispatch<SetStateAction<string | undefined>>;
-}> = ({ identity, room, setToken, setConnect, setRoomname, setIdentity }) => {
+  status: SessionStatus;
+  join: (credentials: JoinCredentials) => Promise<void>;
+  leave: () => void;
+}> = ({ identity, room, status, join, leave }) => {
   return (
     <Layout>
       <Header
@@ -108,33 +118,23 @@ const Screen: React.FC<{
         ServerSwitcher={<ServerSwitcher enabled={room === undefined} />}
       />
       {room === undefined || identity === undefined ? (
-        <RoomListScreen
-          setToken={setToken}
-          setConnect={setConnect}
-          setRoomname={setRoomname}
-          setIdentity={setIdentity}
-        />
+        <RoomListScreen join={join} />
       ) : (
         <Stage />
       )}
+      <ConnectionBanner status={status} onLeave={leave} />
       <Toaster />
     </Layout>
   );
 };
 
 const RoomListScreen: React.FC<{
-  setToken: Dispatch<SetStateAction<string | undefined>>;
-  setConnect: Dispatch<SetStateAction<boolean>>;
-  setRoomname: Dispatch<SetStateAction<string | undefined>>;
-  setIdentity: Dispatch<SetStateAction<string | undefined>>;
-}> = ({ setToken, setConnect, setRoomname, setIdentity }) => {
+  join: (credentials: JoinCredentials) => Promise<void>;
+}> = ({ join }) => {
   const { server } = useContext(XimiServerContext);
   const { data, isValidating, error, mutate } = useSWR(
     `list-rooms-${server.id}`,
-    async () => {
-      const r = await fetch(`${server.serverUrl}/rooms`);
-      return await r.json();
-    },
+    () => ximiRequest<{ name: string }[]>(`${server.serverUrl}/rooms`),
     {
       refreshInterval: 5000,
     },
@@ -156,8 +156,12 @@ const RoomListScreen: React.FC<{
   }, [isValidating]);
 
   if (error) {
-    console.error(error);
-    return <>Error!</>;
+    // SWR keeps polling, so this clears itself once the server is back
+    return (
+      <div className="p-4 text-center">
+        Can't load rooms: {errorMessage(error)}
+      </div>
+    );
   }
 
   return (
@@ -245,41 +249,21 @@ const RoomListScreen: React.FC<{
                 ) => {
                   const identity = _identity.toUpperCase();
                   try {
-                    // first, get a token
-                    const response = await fetch(
-                      `${server.serverUrl}/room/token/control`,
-                      {
-                        method: "POST",
-                        body: JSON.stringify({
-                          identity,
-                          passcode,
-                          roomName: joiningRoom,
-                        }),
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                      },
-                    );
-
-                    const data = await response.json();
-
-                    if (typeof data.token === "string") {
-                      setToken(() => data.token);
-                      setRoomname(() => joiningRoom);
-                      setIdentity(() => identity);
-                      setConnect(() => true);
-                      resetForm();
-                      setShowJoinModal(false);
-                    } else {
-                      if (data?.message === "Incorrect passcode") {
-                        setFieldError("passcode", "Passcode incorrect");
-                      } else {
-                        throw new Error(data?.message);
-                      }
-                    }
-                  } catch (err) {
+                    await join({
+                      serverUrl: server.serverUrl,
+                      roomName: joiningRoom,
+                      identity,
+                      passcode,
+                    });
+                    resetForm();
                     setShowJoinModal(false);
-                    toast.error("An error has occurred");
+                  } catch (err) {
+                    if (err instanceof ApiError && err.status === 401) {
+                      setFieldError("passcode", err.message);
+                    } else {
+                      setShowJoinModal(false);
+                      toastError(err, "Could not join");
+                    }
                   }
                 }}
               >
@@ -389,22 +373,22 @@ const RoomListScreen: React.FC<{
                   passcode: "",
                 }}
                 validateOnMount={true}
-                onSubmit={async ({ roomName, passcode }) => {
+                onSubmit={async ({ roomName, passcode }, { resetForm }) => {
                   try {
-                    const response = await fetch(`${server.serverUrl}/room`, {
-                      method: "POST",
-                      body: JSON.stringify({ roomName, passcode }),
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                    });
-                    return response;
+                    const { name } = await ximiRequest<{ name: string }>(
+                      `${server.serverUrl}/room`,
+                      { method: "POST", body: { roomName, passcode } },
+                    );
+                    setShowCreateModal(false);
+                    resetForm();
+                    mutate();
+                    toast.success(`Created room ${name}`);
                   } catch (err) {
-                    toast.error("An error has occurred");
+                    toastError(err, "Could not create room");
                   }
                 }}
               >
-                {({ isValid, isSubmitting, submitForm, resetForm, values }) => (
+                {({ isValid, isSubmitting, submitForm }) => (
                   <form>
                     <div className="p-4 border-y border-brand">
                       <div className="flex flex-col items-center my-2 gap-1">
@@ -449,28 +433,7 @@ const RoomListScreen: React.FC<{
                       <Button
                         variant="primary"
                         onClick={async () => {
-                          const _roomName = values.roomName.toUpperCase();
-                          const response =
-                            (await submitForm()) as unknown as Response;
-                          if (
-                            response.status === 200 ||
-                            response.status === 201
-                          ) {
-                            setShowCreateModal(() => false);
-                            resetForm();
-                            mutate();
-                            toast.success(`Created room ${_roomName}`);
-                          } else {
-                            setShowCreateModal(() => false);
-                            const data = await response?.json();
-                            if (Array.isArray(data?.message)) {
-                              (data.message as string[]).forEach((m) =>
-                                toast.error(m),
-                              );
-                            } else {
-                              toast.error("An error has occurred. ");
-                            }
-                          }
+                          await submitForm();
                         }}
                         disabled={!isValid || isSubmitting}
                       >

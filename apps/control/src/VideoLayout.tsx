@@ -7,7 +7,7 @@ import { useContext, useState } from "react";
 import { SetVideoLayoutAction, XimiParticipantState } from "types";
 import classNames from "classnames";
 import { FaBinoculars, FaUser } from "react-icons/fa6";
-import { VideoFrame } from "ui/tailwind";
+import { VideoFrame, patchRoomState } from "ui/tailwind";
 import { Popover } from "@headlessui/react";
 import { XimiServerContext } from "./ximiServerContext";
 
@@ -162,14 +162,7 @@ const LayoutEditor: React.FC<{ identity: string }> = ({ identity }) => {
                   },
                 };
 
-                const r = await fetch(`${server.serverUrl}/room/state`, {
-                  method: "PATCH",
-                  body: JSON.stringify(patch),
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                });
-                return await r.json();
+                await patchRoomState(server.serverUrl, patch);
               }}
             >
               <img src={layout.image} alt={layout.name} className="w-6" />
@@ -290,17 +283,7 @@ const LayoutEditor: React.FC<{ identity: string }> = ({ identity }) => {
                                     },
                                   };
 
-                                  const r = await fetch(
-                                    `${server.serverUrl}/room/state`,
-                                    {
-                                      method: "PATCH",
-                                      body: JSON.stringify(patch),
-                                      headers: {
-                                        "Content-Type": "application/json",
-                                      },
-                                    },
-                                  );
-                                  return await r.json();
+                                  await patchRoomState(server.serverUrl, patch);
                                 }}
                               >
                                 {selectedP.identity}

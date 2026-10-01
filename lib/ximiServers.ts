@@ -1,6 +1,6 @@
 export type XimiServer = {
   name: string;
-  id: "localhost" | "ximi-livekit" | "livekit-cloud" | "ximi-offline";
+  id: "env" | "localhost" | "ximi-livekit" | "livekit-cloud" | "ximi-offline";
   serverUrl: string;
 };
 
@@ -28,7 +28,16 @@ if (import.meta.env.VITE_HAS_OFFLINE) {
   });
 }
 
-if (import.meta.env.DEV) {
+/** VITE_XIMI_SERVER_URL (app .env) overrides the localhost default */
+const envServerUrl: string | undefined = import.meta.env.VITE_XIMI_SERVER_URL;
+
+if (envServerUrl) {
+  servers.splice(0, 0, {
+    name: envServerUrl.replace(/^https?:\/\//, ""),
+    id: "env",
+    serverUrl: envServerUrl.replace(/\/+$/, ""),
+  });
+} else if (import.meta.env.DEV) {
   servers.splice(0, 0, {
     name: "localhost",
     id: "localhost",

@@ -1,5 +1,5 @@
 import { LiveKitRoom } from "@livekit/components-react";
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useMemo } from "react";
 import {
   ApiError,
   Button,
@@ -145,6 +145,17 @@ const RoomListScreen: React.FC<{
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joiningRoom, setJoiningRoom] = useState<string>("");
 
+  // Built once per dialog opening so the schema's server-check cache survives
+  // re-renders (and starts fresh each time the dialog opens)
+  const joinSchema = useMemo(
+    () => joinRoomSchemaForRoom(server.serverUrl, joiningRoom),
+    [server.serverUrl, joiningRoom, showJoinModal],
+  );
+  const createSchema = useMemo(
+    () => createRoomSchema(server.serverUrl),
+    [server.serverUrl, showCreateModal],
+  );
+
   useEffect(() => {
     if (isValidating) {
       setShowLoading(() => true);
@@ -234,10 +245,7 @@ const RoomListScreen: React.FC<{
               </Dialog.Title>
 
               <Formik<Yup.InferType<ReturnType<typeof joinRoomSchemaForRoom>>>
-                validationSchema={joinRoomSchemaForRoom(
-                  server.serverUrl,
-                  joiningRoom,
-                )}
+                validationSchema={joinSchema}
                 initialValues={{
                   passcode: "",
                   identity: "",
@@ -367,13 +375,16 @@ const RoomListScreen: React.FC<{
               </Dialog.Title>
 
               <Formik<Yup.InferType<ReturnType<typeof createRoomSchema>>>
-                validationSchema={createRoomSchema(server.serverUrl)}
+                validationSchema={createSchema}
                 initialValues={{
                   roomName: "",
                   passcode: "",
                 }}
                 validateOnMount={true}
-                onSubmit={async ({ roomName, passcode }, { resetForm }) => {
+                onSubmit={async (
+                  { roomName, passcode },
+                  { resetForm, setFieldError },
+                ) => {
                   try {
                     const { name } = await ximiRequest<{ name: string }>(
                       `${server.serverUrl}/room`,
@@ -384,7 +395,12 @@ const RoomListScreen: React.FC<{
                     mutate();
                     toast.success(`Created room ${name}`);
                   } catch (err) {
-                    toastError(err, "Could not create room");
+                    // taken since the live check ran: show it on the field
+                    if (err instanceof ApiError && err.status === 409) {
+                      setFieldError("roomName", err.message);
+                    } else {
+                      toastError(err, "Could not create room");
+                    }
                   }
                 }}
               >

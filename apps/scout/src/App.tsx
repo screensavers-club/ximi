@@ -1,5 +1,5 @@
 import { LiveKitRoom } from "@livekit/components-react";
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useMemo } from "react";
 import {
   ApiError,
   Button,
@@ -141,6 +141,13 @@ const RoomListScreen: React.FC<{
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joiningRoom, setJoiningRoom] = useState<string>("");
 
+  // Built once per dialog opening so the schema's server-check cache survives
+  // re-renders (and starts fresh each time the dialog opens)
+  const joinSchema = useMemo(
+    () => joinRoomSchemaForRoom(server.serverUrl, joiningRoom),
+    [server.serverUrl, joiningRoom, showJoinModal],
+  );
+
   useEffect(() => {
     if (isValidating) {
       setShowLoading(() => true);
@@ -220,10 +227,7 @@ const RoomListScreen: React.FC<{
               </Dialog.Title>
 
               <Formik<Yup.InferType<ReturnType<typeof joinRoomSchemaForRoom>>>
-                validationSchema={joinRoomSchemaForRoom(
-                  server.serverUrl,
-                  joiningRoom,
-                )}
+                validationSchema={joinSchema}
                 initialValues={{
                   passcode: "",
                   identity: "",

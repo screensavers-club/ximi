@@ -7,7 +7,8 @@ import { config } from 'dotenv';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AllExceptionsFilter } from './util/http-exception.filter';
 
-config();
+// DOTENV_CONFIG_PATH picks another env file, e.g. .env.offline (see start:offline)
+config({ path: process.env.DOTENV_CONFIG_PATH });
 
 const logger = new Logger('Process');
 

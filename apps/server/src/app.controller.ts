@@ -24,14 +24,11 @@ import {
   joinRoomSchema,
   roomStateActionSchema,
 } from 'validation-schema';
-import { config } from 'dotenv';
 import { XIMIRole } from 'ximi-types';
 import {
   RoomStateAction,
   RoomStateService,
 } from './room-state/room-state.service';
-
-config();
 
 type JoinRoomBody = Yup.InferType<ReturnType<typeof joinRoomSchema>>;
 

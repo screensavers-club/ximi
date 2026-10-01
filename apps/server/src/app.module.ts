@@ -7,7 +7,11 @@ import { RoomStateService } from './room-state/room-state.service';
 import { RoomStateStore } from './room-state/room-state.store';
 
 @Module({
-  imports: [ConfigModule.forRoot()],
+  imports: [
+    ConfigModule.forRoot({
+      envFilePath: process.env.DOTENV_CONFIG_PATH || '.env',
+    }),
+  ],
   controllers: [AppController],
   providers: [AppService, LivekitService, RoomStateService, RoomStateStore],
 })

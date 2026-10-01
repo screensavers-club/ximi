@@ -9,7 +9,7 @@
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "start:offline": "export NODE_TLS_REJECT_UNAUTHORIZED=0; nest start",
+    "start:offline": "NODE_EXTRA_CA_CERTS=../../certs/ximi-ca.crt DOTENV_CONFIG_PATH=.env.offline nest start",
     "dev": "nest start --watch",
     "dev:livekit": "livekit-server --config ./setup/livekit.yaml",
     "start:dev": "nest start --watch",

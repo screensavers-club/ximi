@@ -16,22 +16,12 @@ rtc:
   #    protocol: tls
   #    username: '9d17da4330d48571b6fa210e'
   #    credential: 'arvhL4qlS+oJJk/e'
-redis:
-  address:
-    127.0.0.1:6379
-    #   username: "default"
-    #   password: "f28jfsjdlIJfi23Jsdk"
-  db:
-    0
-    # turn:
-    #   enabled: false
-    #   domain: livekit-turn.ximi.network
-    #   tls_port: 5349
-    #   udp_port: 443
-    #   external_tls: true
+# No redis: a single LiveKit server doesn't need it (only multi-node setups do)
 keys:
   APIbwh75fZDiGWQ: pjPZSpfsII40fNO0F2gzlYuK53DcC25cHulmPsCxl3t
 webhook:
   api_key: 'APIbwh75fZDiGWQ'
   urls:
-    - 'https://server.ximi.offline/livekit/webhook'
+    # straight to the XIMI server on this machine: no DNS, no TLS (LiveKit
+    # does not trust the XIMI CA)
+    - 'http://127.0.0.1:4000/livekit/webhook'

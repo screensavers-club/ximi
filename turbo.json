@@ -25,6 +25,15 @@
     },
     "dev": {
       "cache": false
-    }
+    },
+
+    "build:offline": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "cache": false
+    },
+    "livekit:offline": { "cache": false, "persistent": true },
+    "caddy:offline": { "cache": false, "persistent": true },
+    "start:offline": { "cache": false, "persistent": true }
   }
 }

@@ -10,6 +10,8 @@
     "preinstall": "npx only-allow pnpm",
     "livekit": "pnpm --filter server dev:livekit",
     "build": "turbo run build",
+    "build:offline": "turbo run build:offline",
+    "offline": "turbo run livekit:offline caddy:offline start:offline --concurrency=40",
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""

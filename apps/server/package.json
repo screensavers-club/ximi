@@ -10,6 +10,8 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:offline": "NODE_EXTRA_CA_CERTS=../../certs/ximi-ca.crt DOTENV_CONFIG_PATH=.env.offline nest start",
+    "livekit:offline": "livekit-server --config ./setup/livekit.yaml",
+    "caddy:offline": "caddy run --config ./setup/ximi-local.Caddyfile --adapter caddyfile",
     "dev": "nest start --watch",
     "dev:livekit": "livekit-server --config ./setup/livekit.yaml",
     "start:dev": "nest start --watch",

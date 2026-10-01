@@ -1,29 +1,45 @@
+# XIMI offline: HTTPS for every *.ximi.offline hostname.
+#
+# Run from apps/server (certificate paths are relative to it):
+#   pnpm --filter server caddy:offline        (or `pnpm offline` from the repo root)
+# Certificates: see certs/README.md
+
+{
+	# certificates are provided below; never try to obtain or install any
+	auto_https disable_certs
+	skip_install_trust
+}
+
+(ximi_tls) {
+	tls ../../certs/ximi.offline.crt ../../certs/ximi.offline.key
+}
+
 livekit.ximi.offline {
+	import ximi_tls
 	reverse_proxy 127.0.0.1:7880
-	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
 }
 
 control.ximi.offline {
+	import ximi_tls
 	reverse_proxy 127.0.0.1:3100
-	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
 }
 
 performer.ximi.offline {
+	import ximi_tls
 	reverse_proxy 127.0.0.1:3200
-	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
 }
 
 scout.ximi.offline {
+	import ximi_tls
 	reverse_proxy 127.0.0.1:3300
-	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
 }
 
 output.ximi.offline {
+	import ximi_tls
 	reverse_proxy 127.0.0.1:3400
-	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
 }
 
 server.ximi.offline {
+	import ximi_tls
 	reverse_proxy 127.0.0.1:4000
-	tls /Users/siah/Dev/ximi/certs/ximi.offline.crt /Users/siah/Dev/ximi/certs/ximi.offline.key
 }

@@ -55,16 +55,13 @@ in this folder. They come with the repo; after a renewal, pull (or copy the
 three files over) and restart:
 
 1. Put the files in `certs/`.
-2. Restart Caddy so it serves the new certificate
-   (`caddy reload --config apps/server/setup/ximi-local.Caddyfile`).
+2. Restart Caddy so it serves the new certificate: restart `pnpm offline`, or
+   `cd apps/server && caddy reload --config ./setup/ximi-local.Caddyfile --adapter caddyfile`.
 3. Restart the XIMI server (`pnpm --filter server start:offline`) if
    `ximi-ca.crt` changed.
 
 Renewing the server certificate with the same CA needs **no** changes on
 client devices. Only a new CA does.
-
-Note: `apps/server/setup/ximi-local.Caddyfile` currently points at absolute
-paths under `/Users/siah/Dev/ximi/certs`. Adjust them on other machines.
 
 ## Renew the server certificate (same CA)
 

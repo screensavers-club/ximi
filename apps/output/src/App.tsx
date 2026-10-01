@@ -2,20 +2,28 @@ import {
   LiveKitRoom,
   useStartAudio,
   useRoomContext,
-  useParticipants,
+  useRemoteParticipant,
 } from "@livekit/components-react";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { VideoFrame } from "ui/tailwind";
+import {
+  ConnectionBanner,
+  VideoFrame,
+  useRoomSession,
+  ximiRoomOptions,
+} from "ui/tailwind";
 import qs from "qs";
 import useSWR from "swr";
 import ShortUniqueId from "short-unique-id";
 import { FaPlay } from "react-icons/fa6";
 import { XimiParticipantState } from "types";
-import { RemoteParticipant } from "livekit-client";
+import { RemoteParticipant, RemoteTrack, Track } from "livekit-client";
 
 const uid = new ShortUniqueId({
   dictionary: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
 });
+
+/** OBS's browser source exposes window.obsstudio */
+const inObs = typeof window !== "undefined" && "obsstudio" in window;
 
 function App() {
   const { server, room, passcode, target, mode } = qs.parse(
@@ -24,13 +32,20 @@ function App() {
       ignoreQueryPrefix: true,
     },
   );
+  const urlValid =
+    typeof server === "string" &&
+    typeof room === "string" &&
+    typeof passcode === "string" &&
+    typeof target === "string" &&
+    typeof mode === "string";
 
-  const { data: livekitUrl, isValidating } = useSWR(
-    `livekitUrl-${server}`,
+  // SWR keeps retrying (with backoff) if the server isn't up yet
+  const { data: livekitUrl } = useSWR(
+    urlValid ? `livekitUrl-${server}` : null,
     async () => {
       const req = await fetch(`${server}/livekit-url`);
       const { livekitUrl } = await req.json();
-      return livekitUrl;
+      return livekitUrl as string;
     },
     {
       revalidateOnFocus: false,
@@ -41,145 +56,154 @@ function App() {
 
   const rand = useMemo(() => uid.rnd(6), []);
   const [identity] = useState<string>(`OUT${rand}`);
-  const [token, setToken] = useState<string>("");
+
+  // Output pages run unattended (OBS), so they never give up rejoining
+  const { session, status, joinWithRetry, roomCallbacks } = useRoomSession(
+    "output",
+    { retryForever: true },
+  );
 
   useEffect(() => {
-    fetch(`${server}/room/token/output`, {
-      method: "POST",
-      body: JSON.stringify({
-        identity,
-        passcode,
-        roomName: room,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    }).then((response) => {
-      response.json().then((_token) => {
-        setToken(() => _token.token);
-      });
+    if (!urlValid) {
+      return;
+    }
+    joinWithRetry({
+      serverUrl: server,
+      roomName: room,
+      passcode,
+      identity,
     });
-  }, [room, passcode, target, mode, identity, server]);
+  }, [urlValid, server, room, passcode, identity, joinWithRetry]);
 
-  if (
-    typeof room !== "string" ||
-    typeof passcode !== "string" ||
-    typeof target !== "string" ||
-    typeof mode !== "string"
-  ) {
+  if (!urlValid) {
     return <div>URL Invalid</div>;
   }
 
-  if (isValidating) {
-    return <div>Loading</div>;
-  }
-
   return (
-    <LiveKitRoom token={token} serverUrl={livekitUrl} connect={token !== ""}>
+    <LiveKitRoom
+      token={session?.token}
+      serverUrl={livekitUrl}
+      connect={session !== undefined && typeof livekitUrl === "string"}
+      options={ximiRoomOptions}
+      {...roomCallbacks}
+    >
       <OutputModule target={target} mode={mode} />
+      {/* don't draw status over the broadcast picture */}
+      {!inObs && <ConnectionBanner status={status} />}
     </LiveKitRoom>
   );
 }
 
 export default App;
 
+const audioTrackOf = (p: RemoteParticipant | undefined) =>
+  (
+    p?.getTrackPublication(Track.Source.Microphone) ??
+    Array.from(p?.audioTrackPublications.values() ?? [])[0]
+  )?.track as RemoteTrack | undefined;
+
+const delayOf = (p: RemoteParticipant | undefined) => {
+  try {
+    const state = JSON.parse(p?.metadata || "") as XimiParticipantState;
+    return typeof state.audio?.delay === "number" ? state.audio.delay : 0;
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * Plays the target's audio through a DelayNode.
+ *
+ * One AudioContext + DelayNode live for the whole page. The track source is
+ * rebuilt whenever the target's audio track changes (they republish, switch
+ * input, reconnect, or leave and rejoin), so audio comes back on its own.
+ */
+const useDelayedAudio = (
+  track: RemoteTrack | undefined,
+  delayMs: number,
+  enabled: boolean,
+  canPlayAudio: boolean,
+) => {
+  const graph = useRef<{ ctx: AudioContext; delay: DelayNode }>();
+  const audioEl = useRef<HTMLAudioElement>(null);
+
+  const getGraph = () => {
+    if (graph.current === undefined) {
+      const ctx = new AudioContext();
+      const delay = new DelayNode(ctx, { maxDelayTime: 5, delayTime: 0 });
+      delay.connect(ctx.destination);
+      graph.current = { ctx, delay };
+    }
+    return graph.current;
+  };
+
+  // apply the delay whenever it changes - including the initial value on load
+  useEffect(() => {
+    const { ctx, delay } = getGraph();
+    delay.delayTime.setValueAtTime(delayMs / 1000, ctx.currentTime);
+    console.log(`delay set to ${delayMs}`);
+  }, [delayMs]);
+
+  useEffect(() => {
+    const el = audioEl.current;
+    if (!enabled || !canPlayAudio || track === undefined || el === null) {
+      return;
+    }
+    const { ctx, delay } = getGraph();
+
+    // Chrome only feeds a remote WebRTC stream into Web Audio if a media
+    // element is also playing it; keep that element muted.
+    track.attach(el);
+    el.muted = true;
+
+    const source = ctx.createMediaStreamSource(
+      new MediaStream([track.mediaStreamTrack]),
+    );
+    source.connect(delay);
+
+    if (ctx.state !== "running") {
+      ctx.resume();
+    }
+
+    return () => {
+      source.disconnect();
+      track.detach(el);
+    };
+  }, [track, enabled, canPlayAudio]);
+
+  useEffect(
+    () => () => {
+      graph.current?.ctx.close();
+      graph.current = undefined;
+    },
+    [],
+  );
+
+  return audioEl;
+};
+
 const OutputModule = ({ target, mode }: { target: string; mode: string }) => {
-  const participants = useParticipants();
-  const participant = participants.find(
-    (p) => p.identity === target,
-  ) as RemoteParticipant;
+  const participant = useRemoteParticipant(target);
   const room = useRoomContext();
   const { canPlayAudio, mergedProps } = useStartAudio({
     room,
     props: { style: { display: "flex" } },
   });
 
-  const audioRef = useRef<HTMLMediaElement>(null);
-  const AudioCtxRef = useRef<AudioContext>();
-  const mediaStreamSource = useRef<MediaStreamAudioSourceNode>();
-  const delayNode = useRef<DelayNode>();
-
   const videoOn = mode === "1" || mode === "2";
   const audioOn = mode === "0" || mode === "2";
 
-  useEffect(() => {
-    if (participant?.metadata === undefined) {
-      return;
-    }
-
-    try {
-      const pState = JSON.parse(
-        participant.metadata || "",
-      ) as XimiParticipantState;
-      if (typeof pState.audio.delay === "number") {
-        if (delayNode.current !== undefined) {
-          delayNode.current.delayTime.value = pState.audio.delay / 1000;
-          console.log(`delay set to ${pState.audio.delay}`);
-        }
-      }
-    } catch (err) {
-      console.log(err);
-    }
-  }, [participant?.metadata]);
-
-  useEffect(() => {
-    if (!canPlayAudio) {
-      return;
-    }
-
-    if (participant === undefined || participant.audioTracks.size < 0) {
-      return;
-    }
-
-    if (AudioCtxRef.current === undefined) {
-      AudioCtxRef.current = new AudioContext();
-    }
-
-    if (delayNode.current === undefined) {
-      delayNode.current = new DelayNode(AudioCtxRef.current, {
-        maxDelayTime: 5,
-        delayTime: 0,
-      });
-    }
-
-    const targetTrack = Array.from(participant.audioTracks)?.[0]?.[1].track;
-
-    if (audioRef.current !== null && targetTrack !== undefined) {
-      targetTrack.attach(audioRef.current);
-      audioRef.current.muted = true;
-    }
-
-    if (mediaStreamSource.current === undefined && targetTrack !== undefined) {
-      mediaStreamSource.current = AudioCtxRef.current.createMediaStreamSource(
-        new MediaStream([targetTrack.mediaStreamTrack]),
-      );
-
-      mediaStreamSource.current
-        .connect(delayNode.current)
-        .connect(AudioCtxRef.current.destination);
-    }
-
-    if (AudioCtxRef.current.state !== "running") {
-      AudioCtxRef.current.resume();
-    }
-  }, [canPlayAudio, participant?.audioTracks?.size, participant]);
-
-  if (participant === undefined) {
-    return <div>Loading</div>;
-  }
-
-  const audioTrackPub =
-    participant.audioTracks.size > 0
-      ? Array.from(participant.audioTracks)[0][1].source
-      : undefined;
+  const audioRef = useDelayedAudio(
+    audioTrackOf(participant),
+    delayOf(participant),
+    audioOn,
+    canPlayAudio,
+  );
 
   return (
     <div className="object-cover w-full h-[100vh] overflow-hidden">
-      {audioOn && audioTrackPub && (
+      {audioOn && (
         <>
-          {/*
-          <AudioTrack participant={participant} source={audioTrackPub} />
-					*/}
           <audio ref={audioRef} />
 
           {!canPlayAudio && (
@@ -192,8 +216,10 @@ const OutputModule = ({ target, mode }: { target: string; mode: string }) => {
         </>
       )}
 
-      {videoOn && participant.videoTracks.size > 0 && (
-        <VideoFrame identity={target} full={true} preview={false} />
+      {participant === undefined ? (
+        <div>Waiting for {target}</div>
+      ) : (
+        videoOn && <VideoFrame identity={target} full={true} preview={false} />
       )}
     </div>
   );

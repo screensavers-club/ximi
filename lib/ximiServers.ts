@@ -1,6 +1,6 @@
 export type XimiServer = {
   name: string;
-  id: "localhost" | "ximi-livekit" | "livekit-cloud";
+  id: "env" | "localhost" | "ximi-livekit" | "livekit-cloud";
   serverUrl: string;
 };
 
@@ -20,7 +20,16 @@ const servers: XimiServer[] = [
   },
 ];
 
-if (import.meta.env.DEV) {
+/** VITE_XIMI_SERVER_URL (app .env) overrides the localhost default */
+const envServerUrl: string | undefined = import.meta.env.VITE_XIMI_SERVER_URL;
+
+if (envServerUrl) {
+  servers.splice(0, 0, {
+    name: envServerUrl.replace(/^https?:\/\//, ""),
+    id: "env",
+    serverUrl: envServerUrl.replace(/\/+$/, ""),
+  });
+} else if (import.meta.env.DEV) {
   servers.splice(0, 0, {
     name: "localhost",
     id: "localhost",

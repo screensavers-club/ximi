@@ -1,11 +1,14 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { XimiParticipantState, XIMIRole, XimiRoomState } from 'ximi-types';
+import { Injectable } from '@nestjs/common';
+import { XIMIRole, XimiParticipantState } from 'ximi-types';
 import {
   RoomServiceClient,
   WebhookReceiver,
   AccessToken,
   Room,
 } from 'livekit-server-sdk';
+
+/** Seconds before a LiveKit API call is treated as failed */
+const LIVEKIT_REQUEST_TIMEOUT = 5;
 
 @Injectable()
 export class LivekitService {
@@ -17,6 +20,7 @@ export class LivekitService {
       process.env.LIVEKIT_HOST,
       process.env.LIVEKIT_KEY,
       process.env.LIVEKIT_SECRET,
+      { requestTimeout: LIVEKIT_REQUEST_TIMEOUT },
     );
 
     this.webhookReceiver = new WebhookReceiver(
@@ -25,53 +29,30 @@ export class LivekitService {
     );
   }
 
-  async getRoom(roomName: string): Promise<Room[]> {
-    return this.client.listRooms([roomName]);
+  async getRoom(roomName: string): Promise<Room | undefined> {
+    const [room] = await this.client.listRooms([roomName]);
+    return room;
   }
 
-  async generateTokenForRoom(
+  async generateToken(
     roomName: string,
     participantIdentity: string,
     role: XIMIRole,
+    initialState: XimiParticipantState,
   ): Promise<string> {
-    try {
-      const [room] = await this.getRoom(roomName);
-
-      if (room === undefined) {
-        throw new Error('room does not exist');
-      }
-
-      const roomMeta = JSON.parse(room.metadata) as XimiRoomState;
-
-      // check if user already has state
-      //
-      const initialParticipantState: XimiParticipantState = roomMeta.presets[
-        roomMeta.activePreset
-      ].participants[participantIdentity]?.state || {
-        role,
-        audio: { mute: [], delay: 0 },
-        video: { layout: undefined, name: 'Auto' },
-        textPoster: '',
-      };
-
-      const at = new AccessToken(
-        process.env.LIVEKIT_KEY,
-        process.env.LIVEKIT_SECRET,
-        {
-          identity: participantIdentity,
-          metadata: JSON.stringify(initialParticipantState),
-        },
-      );
-      at.addGrant({
-        roomJoin: true,
-        room: roomName,
-        canPublish: role === 'OUTPUT' ? false : true,
-      });
-      const token = at.toJwt();
-      return token;
-    } catch (err) {
-      console.warn(err);
-      throw new BadRequestException('Room has no metadata');
-    }
+    const at = new AccessToken(
+      process.env.LIVEKIT_KEY,
+      process.env.LIVEKIT_SECRET,
+      {
+        identity: participantIdentity,
+        metadata: JSON.stringify(initialState),
+      },
+    );
+    at.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: role !== 'OUTPUT',
+    });
+    return at.toJwt();
   }
 }

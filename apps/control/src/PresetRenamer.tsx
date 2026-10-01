@@ -3,6 +3,7 @@ import { useContext, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { PresetIndex, SetPresetNameAction, XimiRoomState } from "types";
 import { XimiServerContext } from "./ximiServerContext";
+import { patchRoomState } from "ui/tailwind";
 
 const renamePreset = async (
   serverUrl: string,
@@ -16,15 +17,7 @@ const renamePreset = async (
     name: newName,
     roomName: roomName,
   };
-  const req = await fetch(`${serverUrl}/room/state`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-  const data = await req.json();
-  return data;
+  return patchRoomState(serverUrl, patch);
 };
 
 const sanitizeNewName = (newName: string) => {
@@ -78,14 +71,14 @@ const PresetRenamer = () => {
               newNameInputRef.current?.value.toUpperCase() || "",
             );
 
-            const result = await renamePreset(
+            const saved = await renamePreset(
               server.serverUrl,
               meta.name,
               roomState.activePreset,
               newName || activePresetName,
             );
 
-            if (result.ok === true && !!newName) {
+            if (saved && !!newName) {
               toast(`Saved name ${newName}`, {
                 position: "bottom-right",
                 className: "bg-brand/80 text-text rounded-none",

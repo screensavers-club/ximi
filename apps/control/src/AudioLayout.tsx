@@ -24,6 +24,7 @@ import { toast } from "react-hot-toast";
 import { ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { Pinger } from "./Ping";
 import { XimiServerContext } from "./ximiServerContext";
+import { patchRoomState } from "ui/tailwind";
 
 type ParticipantWithMeta = {
   participant: LocalParticipant | RemoteParticipant;
@@ -118,7 +119,9 @@ const RemoteParticipantCard: React.FC<{
           <div className="flex items-center gap-2">
             <div
               className={`${
-                participant.audioTracks.size > 0 ? "text-text" : "text-disabled"
+                participant.audioTrackPublications.size > 0
+                  ? "text-text"
+                  : "text-disabled"
               }`}
             >
               <FaMicrophone />
@@ -126,7 +129,7 @@ const RemoteParticipantCard: React.FC<{
             {meta.role !== "CONTROL" && (
               <div
                 className={`${
-                  participant.videoTracks.size > 0
+                  participant.videoTrackPublications.size > 0
                     ? "text-text"
                     : "text-disabled"
                 }`}
@@ -160,14 +163,7 @@ const RemoteParticipantCard: React.FC<{
                       channel: p.participant.identity,
                       forParticipant: participant.identity,
                     };
-                    const r = await fetch(`${server.serverUrl}/room/state`, {
-                      method: "PATCH",
-                      body: JSON.stringify(patch),
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                    });
-                    return await r.json();
+                    await patchRoomState(server.serverUrl, patch);
                   }}
                 />
               ))}
@@ -222,23 +218,11 @@ const RemoteParticipantCard: React.FC<{
                       delay: n,
                     };
 
-                    const r = await fetch(`${server.serverUrl}/room/state`, {
-                      method: "PATCH",
-                      body: JSON.stringify(patch),
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                    });
-
-                    const res = await r.json();
-
-                    if (res.ok) {
+                    if (await patchRoomState(server.serverUrl, patch)) {
                       toast(`Set ${participant.identity} delay to ${n}ms`, {
                         position: "bottom-right",
                         className: "bg-brand/80 text-text rounded-none",
                       });
-                    } else {
-                      console.warn("error setting delay", res);
                     }
                   }}
                 />
@@ -283,7 +267,9 @@ const LocalParticipantCard: React.FC<{
           <div className="flex items-center gap-2">
             <div
               className={`${
-                participant.audioTracks.size > 0 ? "text-text" : "text-disabled"
+                participant.audioTrackPublications.size > 0
+                  ? "text-text"
+                  : "text-disabled"
               }`}
             >
               <FaMicrophone />
@@ -291,7 +277,7 @@ const LocalParticipantCard: React.FC<{
             {meta.role !== "CONTROL" && (
               <div
                 className={`${
-                  participant.videoTracks.size > 0
+                  participant.videoTrackPublications.size > 0
                     ? "text-text"
                     : "text-disabled"
                 }`}
@@ -326,14 +312,7 @@ const LocalParticipantCard: React.FC<{
                         channel: p.participant.identity,
                         forParticipant: participant.identity,
                       };
-                      const r = await fetch(`${server.serverUrl}/room/state`, {
-                        method: "PATCH",
-                        body: JSON.stringify(patch),
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                      });
-                      return await r.json();
+                      await patchRoomState(server.serverUrl, patch);
                     }}
                   />
                 );

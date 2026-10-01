@@ -3,6 +3,7 @@ import { useLocalParticipant } from "@livekit/components-react";
 import classNames from "classnames";
 import { createLocalVideoTrack, Track, VideoPresets } from "livekit-client";
 import { useState } from "react";
+import { toastError } from "../lib/api";
 import { FaCaretDown, FaH, FaL, FaVideo } from "react-icons/fa6";
 
 const clsControlBtn = (active: boolean, disabled: boolean) =>
@@ -29,14 +30,10 @@ const clsToggle = (on: boolean) =>
 const CameraControl = () => {
   const { localParticipant } = useLocalParticipant();
   const hasTrack =
-    Array.from(localParticipant.videoTracks).filter(
-      ([, track]) => track.videoTrack?.source === Track.Source.Camera,
-    ).length > 0;
+    localParticipant.getTrackPublication(Track.Source.Camera) !== undefined;
 
   const hasScreenshareTrack =
-    Array.from(localParticipant.videoTracks).filter(
-      ([, track]) => track.videoTrack?.source === Track.Source.ScreenShare,
-    ).length > 0;
+    localParticipant.getTrackPublication(Track.Source.ScreenShare) !== undefined;
   const [showHint, setShowHint] = useState(false);
   const [mode, setMode] = useState<"HIGH" | "LOW">("HIGH");
 
@@ -49,17 +46,24 @@ const CameraControl = () => {
         className={clsControlBtn(hasTrack, hasScreenshareTrack)}
         onClick={async () => {
           if (hasTrack) {
-            localParticipant.videoTracks.forEach(async ({ track }) => {
-              if (track !== undefined) {
-                await localParticipant.unpublishTrack(track);
-              }
-            });
+            const pub = localParticipant.getTrackPublication(
+              Track.Source.Camera,
+            );
+            if (pub?.track) {
+              await localParticipant.unpublishTrack(pub.track);
+            }
           } else {
-            const newTrack = await createLocalVideoTrack({
-              deviceId: selectedDevice?.deviceId,
-              resolution: mode === "HIGH" ? undefined : VideoPresets.h360,
-            });
-            await localParticipant.publishTrack(newTrack, { simulcast: true });
+            try {
+              const newTrack = await createLocalVideoTrack({
+                deviceId: selectedDevice?.deviceId,
+                resolution: mode === "HIGH" ? undefined : VideoPresets.h360,
+              });
+              await localParticipant.publishTrack(newTrack, {
+                simulcast: true,
+              });
+            } catch (err) {
+              toastError(err, "Camera");
+            }
           }
         }}
       >

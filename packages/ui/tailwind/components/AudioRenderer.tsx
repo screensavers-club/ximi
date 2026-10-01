@@ -1,6 +1,7 @@
 import {
   AudioTrack,
   useLocalParticipant,
+  useParticipantInfo,
   useRemoteParticipants,
 } from "@livekit/components-react";
 import { useEffect, useState } from "react";
@@ -17,6 +18,10 @@ import classNames from "classnames";
 const AudioRenderer: React.FC<{ hidden?: boolean }> = ({ hidden = false }) => {
   const remoteParticipants = useRemoteParticipants();
   const { localParticipant } = useLocalParticipant();
+  // useLocalParticipant doesn't re-render on metadata changes; this does
+  const { metadata: localMetadata } = useParticipantInfo({
+    participant: localParticipant,
+  });
   const [showLayout, setShowLayout] = useState(true);
 
   const filteredParticipants = remoteParticipants
@@ -36,28 +41,22 @@ const AudioRenderer: React.FC<{ hidden?: boolean }> = ({ hidden = false }) => {
     });
 
   useEffect(() => {
-    if (localParticipant.metadata === undefined) {
+    if (localMetadata === undefined) {
       console.warn("local participant does not have metadata");
       return;
     }
     try {
-      const meta = JSON.parse(
-        localParticipant.metadata,
-      ) as XimiParticipantState;
+      const meta = JSON.parse(localMetadata) as XimiParticipantState;
 
       remoteParticipants.forEach((p) => {
-        p.audioTracks.forEach((track) => {
-          if (meta.audio.mute.indexOf(p.identity) > -1) {
-            track.setEnabled(false);
-          } else {
-            track.setEnabled(true);
-          }
-        });
+        const muted = meta.audio.mute.indexOf(p.identity) > -1;
+        // a disabled publication stops the server sending that audio at all
+        p.audioTrackPublications.forEach((pub) => pub.setEnabled(!muted));
       });
     } catch (err) {
       console.warn(err);
     }
-  }, [remoteParticipants, localParticipant.metadata]);
+  }, [remoteParticipants, localMetadata]);
 
   return (
     <div
@@ -77,11 +76,10 @@ const AudioRenderer: React.FC<{ hidden?: boolean }> = ({ hidden = false }) => {
           )}
         >
           {filteredParticipants.map((p) => {
-            const hasAudioTrack = p.participant.audioTracks.size > 0;
-
-            const [_, pub] = hasAudioTrack
-              ? Array.from(p.participant.audioTracks)?.[0]
-              : [0, undefined];
+            const pub = Array.from(
+              p.participant.audioTrackPublications.values(),
+            )[0];
+            const hasAudioTrack = pub !== undefined;
 
             const audioTrackMuted =
               pub === undefined ? undefined : !pub.isEnabled;
@@ -121,11 +119,12 @@ const AudioRenderer: React.FC<{ hidden?: boolean }> = ({ hidden = false }) => {
           key={`audio_renderer_p_${p.identity}`}
           className="absolute opacity-0"
         >
-          {Array.from(p.audioTracks).map(([key, track]) => {
-            return (
-              <AudioTrack participant={p} key={key} source={track.source} />
-            );
-          })}
+          {Array.from(p.audioTrackPublications.values()).map((pub) => (
+            <AudioTrack
+              key={pub.trackSid}
+              trackRef={{ participant: p, publication: pub, source: pub.source }}
+            />
+          ))}
         </div>
       ))}
     </div>

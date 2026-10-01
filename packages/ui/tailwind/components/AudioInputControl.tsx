@@ -1,8 +1,9 @@
 import { Popover } from "@headlessui/react";
 import { useLocalParticipant } from "@livekit/components-react";
 import classNames from "classnames";
-import { createLocalAudioTrack } from "livekit-client";
 import { useState } from "react";
+import { publishAudioInput, unpublishAudio } from "../lib/media";
+import { toastError } from "../lib/api";
 import {
   FaVolumeOff,
   FaVolumeHigh,
@@ -47,7 +48,7 @@ const clsToggle = (on: boolean) =>
 
 const AudioInputControl = () => {
   const { localParticipant } = useLocalParticipant();
-  const hasTrack = localParticipant.audioTracks.size > 0;
+  const hasTrack = localParticipant.audioTrackPublications.size > 0;
   const [showHint, setShowHint] = useState(false);
   const [mode, setMode] = useState<"VOICE" | "LINE">("VOICE");
   const [muted, setMuted] = useState(false);
@@ -59,22 +60,18 @@ const AudioInputControl = () => {
       <button
         className={clsControlBtn(hasTrack)}
         onClick={async () => {
-          if (hasTrack) {
-            localParticipant.audioTracks.forEach(async ({ track }) => {
-              if (track !== undefined) {
-                await localParticipant.unpublishTrack(track);
-              }
-            });
-          } else {
-            const newTrack = await createLocalAudioTrack({
-              deviceId: selectedDevice ? selectedDevice.deviceId : undefined,
-              autoGainControl: false,
-              echoCancellation: mode === "VOICE",
-              noiseSuppression: mode === "VOICE",
-              sampleRate: 48000,
-              channelCount: 2,
-            });
-            await localParticipant.publishTrack(newTrack);
+          try {
+            if (hasTrack) {
+              await unpublishAudio(localParticipant);
+              setMuted(false);
+            } else {
+              await publishAudioInput(localParticipant, {
+                mode,
+                deviceId: selectedDevice?.deviceId,
+              });
+            }
+          } catch (err) {
+            toastError(err, "Audio input");
           }
         }}
       >
@@ -119,16 +116,15 @@ const AudioInputControl = () => {
       {hasTrack ? (
         <button
           className={clsControlBtnMute(muted)}
-          onClick={() => {
+          onClick={async () => {
+            const pubs = Array.from(
+              localParticipant.audioTrackPublications.values(),
+            );
             if (muted) {
-              localParticipant.audioTracks.forEach(async (track) => {
-                await track.unmute();
-                setMuted(false);
-              });
+              await Promise.all(pubs.map((pub) => pub.unmute()));
+              setMuted(false);
             } else {
-              localParticipant.audioTracks.forEach(async (track) => {
-                await track.mute();
-              });
+              await Promise.all(pubs.map((pub) => pub.mute()));
               setMuted(true);
             }
           }}

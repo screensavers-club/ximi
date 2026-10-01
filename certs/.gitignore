@@ -1,0 +1,3 @@
+# CA private key: anyone holding it can issue certificates that every client
+# device trusts. Keep it in a password manager, never in git.
+ximi-ca.key

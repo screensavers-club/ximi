@@ -32,7 +32,7 @@ const qualityLabel: Record<QualityMode, string> = {
 };
 
 /** Camera if published, else screen share, else any video */
-const pickVideoPublication = (
+export const pickVideoPublication = (
   p: Participant | undefined,
 ): TrackPublication | undefined =>
   p === undefined

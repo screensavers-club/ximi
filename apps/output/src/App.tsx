@@ -8,6 +8,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ConnectionBanner,
   VideoFrame,
+  pickVideoPublication,
   useRoomSession,
   ximiRoomOptions,
 } from "ui/tailwind";
@@ -16,7 +17,13 @@ import useSWR from "swr";
 import ShortUniqueId from "short-unique-id";
 import { FaPlay } from "react-icons/fa6";
 import { XimiParticipantState } from "types";
-import { RemoteParticipant, RemoteTrack, Track } from "livekit-client";
+import {
+  RemoteParticipant,
+  RemoteTrack,
+  RemoteTrackPublication,
+  RoomConnectOptions,
+  Track,
+} from "livekit-client";
 
 const uid = new ShortUniqueId({
   dictionary: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
@@ -24,6 +31,13 @@ const uid = new ShortUniqueId({
 
 /** OBS's browser source exposes window.obsstudio */
 const inObs = typeof window !== "undefined" && "obsstudio" in window;
+
+/**
+ * Output only plays one participant, so it subscribes to their tracks by hand
+ * (useTargetSubscriptions) instead of receiving every publisher in the room.
+ * Module-level so LiveKitRoom doesn't see a new object each render.
+ */
+const outputConnectOptions: RoomConnectOptions = { autoSubscribe: false };
 
 function App() {
   const { server, room, passcode, target, mode } = qs.parse(
@@ -85,6 +99,7 @@ function App() {
       serverUrl={livekitUrl}
       connect={session !== undefined && typeof livekitUrl === "string"}
       options={ximiRoomOptions}
+      connectOptions={outputConnectOptions}
       {...roomCallbacks}
     >
       <OutputModule target={target} mode={mode} />
@@ -96,11 +111,41 @@ function App() {
 
 export default App;
 
-const audioTrackOf = (p: RemoteParticipant | undefined) =>
-  (
-    p?.getTrackPublication(Track.Source.Microphone) ??
-    Array.from(p?.audioTrackPublications.values() ?? [])[0]
-  )?.track as RemoteTrack | undefined;
+const audioPublicationOf = (p: RemoteParticipant | undefined) =>
+  p?.getTrackPublication(Track.Source.Microphone) ??
+  Array.from(p?.audioTrackPublications.values() ?? [])[0];
+
+/**
+ * Subscribes to exactly the given publications of the target and
+ * unsubscribes from the rest (e.g. a screen share while the camera is shown).
+ *
+ * Re-runs when the target publishes/unpublishes or rejoins (new participant
+ * object), so the right tracks are picked up again on their own.
+ */
+const useTargetSubscriptions = (
+  participant: RemoteParticipant | undefined,
+  wanted: (RemoteTrackPublication | undefined)[],
+) => {
+  const wantedSids = wanted
+    .flatMap((pub) => (pub ? [pub.trackSid] : []))
+    .join(",");
+  const publishedSids = Array.from(
+    participant?.trackPublications.keys() ?? [],
+  ).join(",");
+
+  useEffect(() => {
+    if (participant === undefined) {
+      return;
+    }
+    const want = new Set(wantedSids.split(","));
+    participant.trackPublications.forEach((pub) => {
+      const desired = want.has(pub.trackSid);
+      if (pub.isDesired !== desired) {
+        pub.setSubscribed(desired);
+      }
+    });
+  }, [participant, wantedSids, publishedSids]);
+};
 
 const delayOf = (p: RemoteParticipant | undefined) => {
   try {
@@ -193,8 +238,16 @@ const OutputModule = ({ target, mode }: { target: string; mode: string }) => {
   const videoOn = mode === "1" || mode === "2";
   const audioOn = mode === "0" || mode === "2";
 
+  const audioPub = audioPublicationOf(participant);
+  useTargetSubscriptions(participant, [
+    videoOn
+      ? (pickVideoPublication(participant) as RemoteTrackPublication)
+      : undefined,
+    audioOn ? audioPub : undefined,
+  ]);
+
   const audioRef = useDelayedAudio(
-    audioTrackOf(participant),
+    audioPub?.track as RemoteTrack | undefined,
     delayOf(participant),
     audioOn,
     canPlayAudio,
